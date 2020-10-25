@@ -329,7 +329,8 @@ public class Message extends FieldMap {
      */
     public String toXML(DataDictionary dataDictionary) {
         try {
-            final Document document = DocumentBuilderFactory.newInstance().newDocumentBuilder()
+            final DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            final Document document = factory.newDocumentBuilder()
                     .newDocument();
             final Element message = document.createElement("message");
             document.appendChild(message);
@@ -351,7 +352,7 @@ public class Message extends FieldMap {
     }
 
     private void toXMLFields(Element message, String section, FieldMap fieldMap,
-            DataDictionary dataDictionary) throws FieldNotFound {
+            DataDictionary dataDictionary) {
         final Document document = message.getOwnerDocument();
         final Element fields = document.createElement(section);
         message.appendChild(fields);

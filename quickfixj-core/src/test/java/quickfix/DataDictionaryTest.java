@@ -59,6 +59,7 @@ import quickfix.fix44.Quote;
 import quickfix.fix44.QuoteRequest;
 import quickfix.test.util.ExpectedTestFailure;
 
+import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.ByteArrayInputStream;
 import java.math.BigDecimal;
 import java.net.URL;
@@ -76,6 +77,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 public class DataDictionaryTest {
 
@@ -88,6 +90,7 @@ public class DataDictionaryTest {
 
         assertEquals("wrong field name", "Currency", dd.getFieldName(15));
         assertEquals("wrong value description", "BUY", dd.getValueName(4, "B"));
+        assertEquals("wrong value for given value name", "2", dd.getValue(54, "SELL"));
         assertEquals("wrong value type", FieldType.STRING, dd.getFieldType(1));
         assertEquals("wrong version", FixVersions.BEGINSTRING_FIX44, dd.getVersion());
         assertFalse("unexpected field values existence", dd.hasFieldValue(1));
@@ -1395,7 +1398,20 @@ public class DataDictionaryTest {
         }
     }
 
+    @Test
+    public void shouldLoadDictionaryWhenExternalDTDisEnabled() throws ConfigError {
+        new DataDictionary("FIX_External_DTD.xml", DocumentBuilderFactory::newInstance);
+    }
 
+    @Test
+    public void shouldFailToLoadDictionaryWhenExternalDTDisDisabled() {
+        try {
+            new DataDictionary("FIX_External_DTD.xml");
+            fail("should fail to load dictionary with external DTD");
+        } catch (ConfigError e) {
+            assertEquals("External DTD: Failed to read external DTD 'mathml.dtd', because 'http' access is not allowed due to restriction set by the accessExternalDTD property.", e.getCause().getCause().getMessage());
+        }
+    }
 
     //
     // Group Validation Tests in RepeatingGroupTest

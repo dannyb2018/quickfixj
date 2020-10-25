@@ -48,6 +48,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
+import javax.xml.XMLConstants;
 
 import static quickfix.FileUtil.Location.CLASSLOADER_RESOURCE;
 import static quickfix.FileUtil.Location.CONTEXT_RESOURCE;
@@ -68,6 +70,24 @@ public class DataDictionary {
 
     private static final int USER_DEFINED_TAG_MIN = 5000;
     private static final String NO = "N";
+
+    private static final String JDK_DOCUMENT_BUILDER_FACTORY_NAME = "com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl";
+    private static final Supplier<DocumentBuilderFactory> DEFAULT_DOCUMENT_BUILDER_FACTORY_SUPPLIER = createDocumentBuilderFactorySupplier();
+
+    private static Supplier<DocumentBuilderFactory> createDocumentBuilderFactorySupplier() {
+        return () -> {
+            DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
+
+            if (JDK_DOCUMENT_BUILDER_FACTORY_NAME.equals(documentBuilderFactory.getClass().getName())) {
+                // disallow access to external DTD and schema when using JDK Xerces implementation
+                documentBuilderFactory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
+                documentBuilderFactory.setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
+            }
+
+            return documentBuilderFactory;
+        };
+    }
+
     private boolean hasVersion = false;
     private boolean checkFieldsOutOfOrder = true;
     private boolean checkFieldsHaveValues = true;
@@ -100,7 +120,19 @@ public class DataDictionary {
      * @throws ConfigError
      */
     public DataDictionary(String location) throws ConfigError {
-        read(location);
+        this(location, DEFAULT_DOCUMENT_BUILDER_FACTORY_SUPPLIER);
+    }
+
+    /**
+     * Initialize a data dictionary from a URL or a file path.
+     *
+     * @param location a URL or file system path
+     * @param documentBuilderFactorySupplier custom document builder factory supplier
+     * @throws ConfigError
+     */
+    public DataDictionary(String location, Supplier<DocumentBuilderFactory> documentBuilderFactorySupplier) throws
+                                                                                                            ConfigError {
+        read(location, documentBuilderFactorySupplier.get());
     }
 
     /**
@@ -110,7 +142,18 @@ public class DataDictionary {
      * @throws ConfigError
      */
     public DataDictionary(InputStream in) throws ConfigError {
-        load(in);
+        this(in, DEFAULT_DOCUMENT_BUILDER_FACTORY_SUPPLIER);
+    }
+
+    /**
+     * Initialize a data dictionary from an input stream.
+     *
+     * @param in the input stream
+     * @param documentBuilderFactorySupplier custom document builder factory supplier
+     * @throws ConfigError
+     */
+    public DataDictionary(InputStream in, Supplier<DocumentBuilderFactory> documentBuilderFactorySupplier) throws ConfigError {
+        load(in, documentBuilderFactorySupplier.get());
     }
 
     /**
@@ -170,6 +213,17 @@ public class DataDictionary {
      */
     public String getValueName(int field, String value) {
         return valueNames.get(field, value);
+    }
+
+    /**
+     * Get the value, if any, for an enumerated value name.
+     *
+     * @param field the tag
+     * @param name the value name
+     * @return the value assigned to passed name
+     */
+    public String getValue(int field, String name) {
+        return valueNames.getValue(field, name);
     }
 
     /**
@@ -846,7 +900,7 @@ public class DataDictionary {
         return elementNodesCount;
     }
 
-    private void read(String location) throws ConfigError {
+    private void read(String location, DocumentBuilderFactory factory) throws ConfigError {
         final InputStream inputStream = FileUtil.open(getClass(), location, URL, FILESYSTEM,
                 CONTEXT_RESOURCE, CLASSLOADER_RESOURCE);
         if (inputStream == null) {
@@ -854,7 +908,7 @@ public class DataDictionary {
         }
 
         try {
-            load(inputStream);
+            load(inputStream, factory);
         } catch (final Exception e) {
             throw new ConfigError(location + ": " + e.getMessage(), e);
         } finally {
@@ -866,8 +920,7 @@ public class DataDictionary {
         }
     }
 
-    private void load(InputStream inputStream) throws ConfigError {
-        final DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+    private void load(InputStream inputStream, DocumentBuilderFactory factory) throws ConfigError {
         Document document;
         try {
             final DocumentBuilder builder = factory.newDocumentBuilder();
@@ -1253,6 +1306,18 @@ public class DataDictionary {
         public V get(int field, String group) {
             Map<String, V> map = get(field);
             return map == null ? null : map.get(group);
+        }
+
+        public String getValue(int field, String name) {
+            Map<String, V> map = get(field);
+            if (map != null) {
+                for (Entry<String, V> entry : map.entrySet()) {
+                    if (entry.getValue().equals(name)) {
+                        return entry.getKey();
+                    }
+                }
+            }
+            return null;
         }
 
         public void put(int field, String group, V value) {
